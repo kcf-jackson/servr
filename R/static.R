@@ -23,7 +23,7 @@
 #' @examples #' see https://github.com/yihui/servr for command line usage
 #' # or run inside an R session
 #' if (interactive()) servr::httd()
-httd = function(dir = '.', headers, ...) {
+httd = function(dir = '.', headers = NULL, ...) {
   dir = normalizePath(dir, mustWork = TRUE)
   if (dir != '.') {
     owd = setwd(dir); on.exit(setwd(owd))
