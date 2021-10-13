@@ -5,7 +5,7 @@
 \alias{httw}
 \title{Serve static files under a directory}
 \usage{
-httd(dir = ".", ...)
+httd(dir = ".", headers, ...)
 
 httw(
   dir = ".",
@@ -19,6 +19,9 @@ httw(
 }
 \arguments{
 \item{dir}{The root directory to serve.}
+
+\item{headers}{(optional) A list of headers to pass to `httpuv` server.
+This should exclude "Content-Type", "Content-Range' and "Accept-Ranges".}
 
 \item{...}{server configurations passed to \code{\link{server_config}()}}
 
@@ -49,6 +52,13 @@ web pages either created from R or read from HTML files.
 watches for changes under the directory: if an HTML file is being viewed in
 the browser, and any files are modified under the directory, the HTML page
 will be automatically refreshed.
+}
+\note{
+The parameter `headers` is added mainly to allow setting the
+"Access-Control-Allow-Origin" header for handling CORS (Cross-Origin Resource Sharing).
+A common usage for INTERNAL testing is
+`headers = list('Access-Control-Allow-Origin' = '*', 'Access-Control-Allow-Methods' = 'GET', 'Cache-Control' = 'no-store, no-cache, must-revalidate')`.
+One should use a specific address over the wildcard operator "*" whenever it is possible.
 }
 \examples{
 #' see https://github.com/yihui/servr for command line usage

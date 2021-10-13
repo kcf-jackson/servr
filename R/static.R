@@ -10,19 +10,26 @@
 #' the browser, and any files are modified under the directory, the HTML page
 #' will be automatically refreshed.
 #' @inheritParams server_config
+#' @param headers (optional) A list of headers to pass to `httpuv` server.
+#' This should exclude "Content-Type", "Content-Range' and "Accept-Ranges".
 #' @param ... server configurations passed to \code{\link{server_config}()}
+#' @note The parameter `headers` is added mainly to allow setting the
+#' "Access-Control-Allow-Origin" header for handling CORS (Cross-Origin Resource Sharing).
+#' A common usage for INTERNAL testing is
+#' `headers = list('Access-Control-Allow-Origin' = '*', 'Access-Control-Allow-Methods' = 'GET', 'Cache-Control' = 'no-store, no-cache, must-revalidate')`.
+#' One should use a specific address over the wildcard operator "*" whenever it is possible.
 #' @export
 #' @references \url{https://github.com/yihui/servr}
 #' @examples #' see https://github.com/yihui/servr for command line usage
 #' # or run inside an R session
 #' if (interactive()) servr::httd()
-httd = function(dir = '.', ...) {
+httd = function(dir = '.', headers, ...) {
   dir = normalizePath(dir, mustWork = TRUE)
   if (dir != '.') {
     owd = setwd(dir); on.exit(setwd(owd))
   }
   res = server_config(dir, ...)
-  app = list(call = serve_dir(dir))
+  app = list(call = serve_dir(dir, headers))
   res$start_server(app)
   invisible(res)
 }
@@ -172,7 +179,7 @@ server_config = function(
   )
 }
 
-serve_dir = function(dir = '.') function(req) {
+serve_dir = function(dir = '.', headers = NULL) function(req) {
   owd = setwd(dir); on.exit(setwd(owd), add = TRUE)
   path = decode_path(req)
   status = 200L
@@ -251,7 +258,7 @@ serve_dir = function(dir = '.') function(req) {
     status = status, body = body,
     headers = c(list('Content-Type' = type), if (status == 206L) list(
       'Content-Range' = paste0("bytes ", range[2], "-", range[3], "/", file_size(path))
-      ),
+      ), headers,
       'Accept-Ranges' = 'bytes') # indicates that the server supports range requests
   )
 }
