@@ -25,11 +25,13 @@
 #' if (interactive()) servr::httd()
 httd = function(dir = '.', headers = NULL, ...) {
   dir = normalizePath(dir, mustWork = TRUE)
+  list_dir <- dir
+  dir <- list_dir[1]
   if (dir != '.') {
     owd = setwd(dir); on.exit(setwd(owd))
   }
   res = server_config(dir, ...)
-  app = list(call = serve_dir(dir, headers))
+  app = list(call = serve_dir(list_dir, headers))
   res$start_server(app)
   invisible(res)
 }
@@ -180,85 +182,90 @@ server_config = function(
 }
 
 serve_dir = function(dir = '.', headers = NULL) function(req) {
-  owd = setwd(dir); on.exit(setwd(owd), add = TRUE)
-  path = decode_path(req)
-  status = 200L
+  list_dir <- dir
+  for (dir in list_dir) {
+    owd = setwd(dir); on.exit(setwd(owd), add = TRUE)
+    path = decode_path(req)
+    status = 200L
 
-  if (grepl('^/', path)) {
-    path = paste('.', path, sep = '')  # the requested file
-  } else if (path == '') path = '.'
-  body = if (file_test('-d', path)) {
-    # ensure a trailing slash if the requested dir does not have one
-    if (path != '.' && !grepl('/$', path)) return(list(
-      status = 301L, body = '', headers = list(
-        'Location' = sprintf('%s/', req$PATH_INFO)
-      )
-    ))
-    type = 'text/html'
-    if (file.exists(idx <- file.path(path, 'index.html'))) {
-      readLines(idx, warn = FALSE)
-    } else {
-      d = file.info(list.files(path, all.files = TRUE, full.names = TRUE))
-      title = escape_html(path)
-      html_doc(c(sprintf('<h1>Index of %s</h1>', title), fileinfo_table(d)),
-               title = title)
-    }
-  } else {
-    # use the custom 404.html only if the path looks like a directory or .html
-    try_404 = function(path) {
-      file.exists('404.html') && grepl('(/|[.]html)$', path, ignore.case = TRUE)
-    }
-    # FIXME: using 302 here because 404.html may contain relative paths, e.g. if
-    # /foo/bar/hi.html gives 404, I cannot just read 404.html and display it,
-    # because it will be treated as /foo/bar/404.html; if 404.html contains
-    # paths like ./css/style.css, I don't know how to let the browser know that
-    # it means /css/style.css instead of /foo/bar/css/style.css
-    if (!file.exists(path))
-      return(if (try_404(path)) list(
-        status = 302L, body = '', headers = list('Location' = '/404.html')
-      ) else list(
-        status = 404L, headers = list('Content-Type' = 'text/plain'),
-        body = paste2('Not found:', path)
+    if (grepl('^/', path)) {
+      path = paste('.', path, sep = '')  # the requested file
+    } else if (path == '') path = '.'
+    body = if (file_test('-d', path)) {
+      # ensure a trailing slash if the requested dir does not have one
+      if (path != '.' && !grepl('/$', path)) return(list(
+        status = 301L, body = '', headers = list(
+          'Location' = sprintf('%s/', req$PATH_INFO)
+        )
       ))
-
-    type = guess_type(path)
-    range = req$HTTP_RANGE
-
-    if (is.null(range)) {
-      read_raw(path)
-    } else {
-      range = strsplit(range, split = "(=|-)")[[1]]
-      b2 = as.numeric(range[2])
-      if (length(range) == 2 && range[1] == "bytes") {
-        # open-ended range request
-        # e.g. Chrome sends the range reuest 'bytes=0-'
-        # http://stackoverflow.com/a/18745164/559676
-        range[3] = file_size(path) - 1
+      type = 'text/html'
+      if (file.exists(idx <- file.path(path, 'index.html'))) {
+        readLines(idx, warn = FALSE)
+      } else {
+        d = file.info(list.files(path, all.files = TRUE, full.names = TRUE))
+        title = escape_html(path)
+        html_doc(c(sprintf('<h1>Index of %s</h1>', title), fileinfo_table(d)),
+                 title = title)
       }
-      b3 = as.numeric(range[3])
-      if (length(range) < 3 || (range[1] != "bytes") || (b2 >= b3))
-        return(list(
-          status = 416L, headers = list('Content-Type' = 'text/plain'),
-          body = 'Requested range not satisfiable\r\n'
+    } else {
+      # use the custom 404.html only if the path looks like a directory or .html
+      try_404 = function(path) {
+        file.exists('404.html') && grepl('(/|[.]html)$', path, ignore.case = TRUE)
+      }
+      if (!file.exists(path)) {
+        if (dir != list_dir[length(list_dir)]) next
+        # FIXME: using 302 here because 404.html may contain relative paths, e.g. if
+        # /foo/bar/hi.html gives 404, I cannot just read 404.html and display it,
+        # because it will be treated as /foo/bar/404.html; if 404.html contains
+        # paths like ./css/style.css, I don't know how to let the browser know that
+        # it means /css/style.css instead of /foo/bar/css/style.css
+        return(if (try_404(path)) list(
+          status = 302L, body = '', headers = list('Location' = '/404.html')
+        ) else list(
+          status = 404L, headers = list('Content-Type' = 'text/plain'),
+          body = paste2('Not found:', path)
         ))
+      }
 
-      status = 206L  # partial content
-      # type may also need to be changed
-      # e.g. to "multipart/byteranges" if multipart range support is added at a later date
-      # or possibly to "application/octet-stream" for binary files
+      type = guess_type(path)
+      range = req$HTTP_RANGE
 
-      con = file(path, open = "rb", raw = TRUE)
-      on.exit(close(con))
-      seek(con, where = b2, origin = "start")
-      readBin(con, 'raw', b3 - b2 + 1)
+      if (is.null(range)) {
+        read_raw(path)
+      } else {
+        range = strsplit(range, split = "(=|-)")[[1]]
+        b2 = as.numeric(range[2])
+        if (length(range) == 2 && range[1] == "bytes") {
+          # open-ended range request
+          # e.g. Chrome sends the range reuest 'bytes=0-'
+          # http://stackoverflow.com/a/18745164/559676
+          range[3] = file_size(path) - 1
+        }
+        b3 = as.numeric(range[3])
+        if (length(range) < 3 || (range[1] != "bytes") || (b2 >= b3))
+          return(list(
+            status = 416L, headers = list('Content-Type' = 'text/plain'),
+            body = 'Requested range not satisfiable\r\n'
+          ))
+
+        status = 206L  # partial content
+        # type may also need to be changed
+        # e.g. to "multipart/byteranges" if multipart range support is added at a later date
+        # or possibly to "application/octet-stream" for binary files
+
+        con = file(path, open = "rb", raw = TRUE)
+        on.exit(close(con))
+        seek(con, where = b2, origin = "start")
+        readBin(con, 'raw', b3 - b2 + 1)
+      }
     }
+    if (is.character(body) && length(body) > 1) body = paste2(body)
+    return(list(
+      status = status, body = body,
+      headers = c(list('Content-Type' = type), if (status == 206L) list(
+        'Content-Range' = paste0("bytes ", range[2], "-", range[3], "/", file_size(path))
+        ), headers,
+        'Accept-Ranges' = 'bytes') # indicates that the server supports range requests
+    ))
   }
-  if (is.character(body) && length(body) > 1) body = paste2(body)
-  list(
-    status = status, body = body,
-    headers = c(list('Content-Type' = type), if (status == 206L) list(
-      'Content-Range' = paste0("bytes ", range[2], "-", range[3], "/", file_size(path))
-      ), headers,
-      'Accept-Ranges' = 'bytes') # indicates that the server supports range requests
-  )
 }
