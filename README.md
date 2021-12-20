@@ -5,6 +5,41 @@
 [![CRAN release](https://www.r-pkg.org/badges/version/servr)](https://cran.r-project.org/package=servr)
 <!-- badges: end -->
 
+---
+
+This fork provides support to CORS headers and serving multiple directories from one local address. 
+
+#### Usage
+
+##### CORS header
+
+```{r}
+cors_header <- list(
+  'Access-Control-Allow-Origin' = 'http://127.0.0.1:5616',
+  'Access-Control-Allow-Methods' = 'GET',
+  'Cache-Control' = 'no-store, no-cache, must-revalidate'
+)
+servr::httd("/mnt/path/dir_1", port = 6321, browser = FALSE, headers = cors_header)
+# servr::daemon_stop()
+```
+The snippet allows port 5616 to access the resources at port 6321. This pattern is needed when your frontend is served at 5616, while the data living in a different folder are served at 6321.
+
+
+
+##### Multiple directories
+
+```{r}
+servr::httd(c("/mnt/path_1/dir_1", "/mnt/path_2/dir_2"), port = 6321)
+# servr::daemon_stop()
+```
+
+The snippet serves multiple directories at the same port 6321. This feature is added to avoid opening too many ports (albeit local ones) when you have multiple datasets at different folders. 
+
+Note that this is implemented using a simple fail-then-try-next mechanism, so if multiple files have the same name in the different directories, only the first one will be served.
+
+See below for the content from the original `readme.md`.
+
+---
 
 A simple HTTP server to serve files under a given directory based on the
 [**httpuv**](https://cran.r-project.org/package=httpuv) package.
