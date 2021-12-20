@@ -202,10 +202,21 @@ serve_dir = function(dir = '.', headers = NULL) function(req) {
       if (file.exists(idx <- file.path(path, 'index.html'))) {
         readLines(idx, warn = FALSE)
       } else {
-        d = file.info(list.files(path, all.files = TRUE, full.names = TRUE))
-        title = escape_html(path)
-        html_doc(c(sprintf('<h1>Index of %s</h1>', title), fileinfo_table(d)),
-                 title = title)
+        if (path == "./") {
+          # Create a combined index at the root
+          list_index <- lapply(list_dir, function(path) {
+            d = file.info(list.files(path, all.files = TRUE, full.names = TRUE))
+            title = escape_html(basename(path))
+            c(sprintf('<h1>Index of subdirectory \'%s\'</h1>', title),
+              fileinfo_table(d))
+          })
+          html_doc(unlist(list_index), title = "Index of files")
+        } else {
+          d = file.info(list.files(path, all.files = TRUE, full.names = TRUE))
+          title = escape_html(path)
+          html_doc(c(sprintf('<h1>Index of %s</h1>', title), fileinfo_table(d)),
+                   title = "Index of files")
+        }
       }
     } else {
       # use the custom 404.html only if the path looks like a directory or .html
