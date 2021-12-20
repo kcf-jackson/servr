@@ -5,7 +5,7 @@
 \alias{httw}
 \title{Serve static files under a directory}
 \usage{
-httd(dir = ".", headers, ...)
+httd(dir = ".", headers = NULL, ...)
 
 httw(
   dir = ".",
